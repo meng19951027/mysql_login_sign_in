@@ -1,0 +1,243 @@
+# 1. 为你的库准备数据
+```
+  drop database db1;  # 小心
+  create database db1 charset utf8;
+  use db1;
+  create table user(id int primary key auto_increment, username varchar(255) not null unique, password varchar(255), unique key(username)) engine=innodb;
+  insert into user(username, password) values('yang','123'),('egon', '123');
+```
+# 2. 函数版本
+# coding: utf-8
+
+import pymysql
+
+conn = pymysql.connect(
+    host='127.0.0.1',
+    port=3306,
+    user='root',
+    password='1234',
+    database='db1,
+    charset='utf8'
+)
+
+cursor = conn.cursor(cursor=pymysql.cursors.DictCursor)
+
+
+def sql_select(username, password):
+    sql = 'select * from user where username=%s and password=%s'
+    rows = cursor.execute(sql, (username, password))
+    if rows:
+        return True
+
+
+def sql_auth(username):
+    sql = 'select * from user where username=%s'
+    rows = cursor.execute(sql, (username,))
+    if rows:
+        return True
+
+
+def sql_insert(username, password):
+    sql = 'insert into user values(%s, %s)'
+    cursor.execute(sql, (username, password))
+    conn.commit()
+
+
+def register():
+    while True:
+        username = input("[返回上一层:B/b]请输入用户账号: ").strip()
+        if username.lower() == 'b':
+            break
+
+        flag = sql_auth(username)
+        if flag:
+            print('对不起! 用户已存在!')
+            continue
+
+        password = input("请输入用户密码: ").strip()
+        re_password = input("请确认用户密码: ").strip()
+        if not all([username, password]):
+            print("对不起, 以上内容输入不能为空!")
+            continue
+        if password == re_password:
+            sql_insert(username, password)
+            print(f"注册成功! 用户:{username}")
+        else:
+            print('对不起, 2次密码输入不一致!')
+
+
+def login():
+    while True:
+        username = input("[返回上一层:B/b]请输入用户账号: ").strip()
+        if username.lower() == 'b':
+            break
+
+        password = input("请输入用户密码: ").strip()
+        if not all([username, password]):
+            print("对不起, 登录失败!")
+            continue
+
+        flag = sql_select(username, password)
+        if flag:
+            print(f"登录成功! 用户:{username}")
+            break
+        else:
+            print("对不起, 登录失败!")
+
+
+func_dic = {
+    '1': register,
+    '2': login,
+}
+
+
+def run():
+    while True:
+        print("""
+        ============ 小功能 ============
+                   1. 注册
+                   2. 登录
+        ============  end  ============
+        """)
+        cmd = input('[退出:Q/q]根据编号选择相应的功能: ').strip()
+        if cmd.lower() == 'q':
+            break
+        if cmd not in func_dic:
+            print("对不起, 输入范围有误!")
+            continue
+        func_dic[cmd]()
+
+
+if __name__ == '__main__':
+    run()python
+# 3. 面向对象版本
+# coding: utf-8
+import pymysql
+
+
+class MySQLDBHandle:
+    def __init__(self,
+                 host='127.0.0.1', port=3306,
+                 user='root', password='1234',
+                 database='db1', charset='utf8'):
+        self.conn = pymysql.connect(
+            host=host,
+            port=port,
+            user=user,
+            password=password,
+            database=database,
+            charset=charset
+        )
+        self.cursor = self.conn.cursor(cursor=pymysql.cursors.DictCursor)
+
+    def insert(self, username, password):
+        """插入操作"""
+        try:
+            sql = 'insert into user(username, password) values(%s, %s)'
+            self.cursor.execute(sql, (username, password))
+            self.conn.commit()
+            return True
+        except Exception as e:
+            self.conn.rollback()
+            return e
+
+    def select(self, username, password=None, function_type=None):
+        """查询操作"""
+        if function_type == 'auth':
+            sql = 'select * from user where username=%s'
+            affected_rows = self.cursor.execute(sql, (username,))
+        elif function_type == 'login':
+            sql = 'select * from user where username=%s and password=%s'
+            affected_rows = self.cursor.execute(sql, (username, password))
+        else:
+            return
+
+        if affected_rows:
+            return True
+
+    def _close_cursor(self):
+        """关闭游标"""
+        self.cursor.close()
+
+    def _close_conn(self):
+        """关闭连接"""
+        self.conn.close()
+
+    def __del__(self):
+        self._close_cursor()
+        self._close_conn()
+
+
+class MyFuncation:
+
+    def __init__(self, handle=MySQLDBHandle()):
+        self.handle = handle
+        self.func_dic = {
+            '1': self.register,
+            '2': self.login,
+        }
+        self.interactive()
+
+    def register(self):
+        while True:
+            username = input("[返回上一层:B/b]请输入用户账号: ").strip()
+            if username.lower() == 'b':
+                break
+
+            flag = self.handle.select(username, function_type='auth')
+            if flag:
+                print('对不起! 用户已存在!')
+                continue
+
+            password = input("请输入用户密码: ").strip()
+            re_password = input("请确认用户密码: ").strip()
+            if not all([username, password]):
+                print("对不起, 以上内容输入不能为空!")
+                continue
+            if password == re_password:
+                flag = self.handle.insert(username, password)
+                if flag is True:
+                    print(f"注册成功! 用户:{username}")
+                else:
+                    print("对不起!", flag)
+            else:
+                print('对不起, 2次密码输入不一致!')
+
+    def login(self):
+        while True:
+            username = input("[返回上一层:B/b]请输入用户账号: ").strip()
+            if username.lower() == 'b':
+                break
+
+            password = input("请输入用户密码: ").strip()
+            if not all([username, password]):
+                print("对不起, 登录失败!")
+                continue
+
+            flag = self.handle.select(username, password, function_type='login')
+            if flag:
+                print(f"登录成功! 用户:{username}")
+                break
+            else:
+                print("对不起, 登录失败!")
+
+    def interactive(self):
+        while True:
+            print("""
+            ============ 小功能 ============
+                       1. 注册
+                       2. 登录
+            ============  end  ============
+            """)
+            cmd = input('[退出:Q/q]根据编号选择相应的功能: ').strip()
+            if cmd.lower() == 'q':
+                break
+            if cmd not in self.func_dic:
+                print("对不起, 输入范围有误!")
+                continue
+            self.func_dic[cmd]()
+
+
+if __name__ == '__main__':
+    MyFuncation()
+#
